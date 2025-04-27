@@ -139,10 +139,10 @@ void displayMessage(String message) {
 void displayDeviceStatus(String status) {
   lcd.setCursor(6, 2); // Hiển thị ở dòng 1 để giữ dòng 0 là chế độ
   lcd.print("                    "); // Xóa dòng 1
-  lcd.setCursor(4, 2);
+  lcd.setCursor(6, 2);
   lcd.print(status);
   delay(2000); // Hiển thị trạng thái trong 2 giây
-  lcd.setCursor(5, 2);
+  lcd.setCursor(6, 2);
   lcd.print("                    "); // Xóa dòng 1 sau khi hiển thị
 }
 
