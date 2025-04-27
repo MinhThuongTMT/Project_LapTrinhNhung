@@ -130,9 +130,20 @@ void displaySelectMode() {
 // Hàm hiển thị thông báo thành công hoặc lỗi
 void displayMessage(String message) {
   lcd.clear();
-  lcd.setCursor(0, 0);
+  lcd.setCursor(5, 0);
   lcd.print(message);
   delay(2000); // Hiển thị thông báo trong 2 giây
+}
+
+// Hàm hiển thị trạng thái thiết bị tạm thời
+void displayDeviceStatus(String status) {
+  lcd.setCursor(6, 2); // Hiển thị ở dòng 1 để giữ dòng 0 là chế độ
+  lcd.print("                    "); // Xóa dòng 1
+  lcd.setCursor(4, 2);
+  lcd.print(status);
+  delay(2000); // Hiển thị trạng thái trong 2 giây
+  lcd.setCursor(5, 2);
+  lcd.print("                    "); // Xóa dòng 1 sau khi hiển thị
 }
 
 // Hàm hiển thị chế độ căn giữa trên dòng 0
@@ -369,151 +380,156 @@ void loop() {
   }
   lastRelayOffState = relayOffState;
 
-  // Xử lý bàn phím ma trận
-  if (millis() - lastKeypadDebounceTime > debounceDelay) {
-    char key = scanKeypad();
-    if (key != '\0') {
-      // Xử lý phím '*' ở trạng thái HOME
-      if (key == '*' && currentScreen == HOME) {
-        currentScreen = MENU;
-        displayMenu();
-        Serial.println("Switched to Menu");
-        lastKeypadDebounceTime = millis();
-      }
-      // Xử lý phím '4' ở trạng thái MENU
-      else if (key == '4' && currentScreen == MENU) {
-        currentScreen = HOME;
-        displayHome();
-        Serial.println("Returned to Home");
-        lastKeypadDebounceTime = millis();
-      }
-      // Xử lý phím '2' ở trạng thái MENU
-      else if (key == '2' && currentScreen == MENU) {
-        currentScreen = LOCK_SYSTEM;
-        displayLockSystem();
-        Serial.println("Switched to Lock System");
-        lastKeypadDebounceTime = millis();
-      }
-      // Xử lý phím '1' ở trạng thái MENU (Chọn chế độ)
-      else if (key == '1' && currentScreen == MENU) {
-        currentScreen = SELECT_MODE;
+// Xử lý bàn phím ma trận
+if (millis() - lastKeypadDebounceTime > debounceDelay) {
+  char key = scanKeypad();
+  if (key != '\0') {
+    // Xử lý phím '*' ở trạng thái HOME
+    if (key == '*' && currentScreen == HOME) {
+      currentScreen = MENU;
+      displayMenu();
+      Serial.println("Switched to Menu");
+      lastKeypadDebounceTime = millis();
+    }
+    // Xử lý phím '4' ở trạng thái MENU
+    else if (key == '4' && currentScreen == MENU) {
+      currentScreen = HOME;
+      displayHome();
+      Serial.println("Returned to Home");
+      lastKeypadDebounceTime = millis();
+    }
+    // Xử lý phím '2' ở trạng thái MENU
+    else if (key == '2' && currentScreen == MENU) {
+      currentScreen = LOCK_SYSTEM;
+      displayLockSystem();
+      Serial.println("Switched to Lock System");
+      lastKeypadDebounceTime = millis();
+    }
+    // Xử lý phím '1' ở trạng thái MENU (Chọn chế độ)
+    else if (key == '1' && currentScreen == MENU) {
+      currentScreen = SELECT_MODE;
+      enteredPassword = "";
+      displaySelectMode();
+      Serial.println("Switched to Select Mode");
+      lastKeypadDebounceTime = millis();
+    }
+    // Xử lý phím '1' hoặc '2' ở trạng thái LOCK_SYSTEM
+    else if (currentScreen == LOCK_SYSTEM) {
+      if (key == '1') {
+        currentScreen = ENTER_PASSWORD;
+        requiredPassword = "8888";
         enteredPassword = "";
-        displaySelectMode();
-        Serial.println("Switched to Select Mode");
+        displayEnterPassword();
+        Serial.println("Enter Password for Unlock (8888)");
+        lastKeypadDebounceTime = millis();
+      } else if (key == '2') {
+        currentScreen = ENTER_PASSWORD;
+        requiredPassword = "9999";
+        enteredPassword = "";
+        displayEnterPassword();
+        Serial.println("Enter Password for Lock (9999)");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '1' hoặc '2' ở trạng thái LOCK_SYSTEM
-      else if (currentScreen == LOCK_SYSTEM) {
-        if (key == '1') {
-          currentScreen = ENTER_PASSWORD;
-          requiredPassword = "8888";
-          enteredPassword = "";
-          displayEnterPassword();
-          Serial.println("Enter Password for Unlock (8888)");
-          lastKeypadDebounceTime = millis();
-        } else if (key == '2') {
-          currentScreen = ENTER_PASSWORD;
-          requiredPassword = "9999";
-          enteredPassword = "";
-          displayEnterPassword();
-          Serial.println("Enter Password for Lock (9999)");
-          lastKeypadDebounceTime = millis();
-        }
-      }
-      // Xử lý nhập mật khẩu ở trạng thái ENTER_PASSWORD
-      else if (currentScreen == ENTER_PASSWORD) {
-        if ((key >= '0' && key <= '9') && enteredPassword.length() < 4) {
-          enteredPassword += key;
-          displayEnterPassword();
-          Serial.print("Password Input: ");
-          Serial.println(enteredPassword);
-          lastKeypadDebounceTime = millis();
-        } else if (key == '#') {
-          if (enteredPassword == requiredPassword) {
-            if (requiredPassword == "8888") {
-              isSystemLocked = false; // Mở khóa hệ thống
-              displayMessage("System Unlocked");
-              Serial.println("System Unlocked");
-            } else if (requiredPassword == "9999") {
-              isSystemLocked = true; // Khóa hệ thống
-              displayMessage("System Locked");
-              Serial.println("System Locked");
-            }
-            currentScreen = HOME;
-            displayHome();
-          } else {
-            displayMessage("Wrong Password");
-            Serial.println("Wrong Password");
-            enteredPassword = "";
-            displayEnterPassword();
-          }
-          lastKeypadDebounceTime = millis();
-        }
-      }
-      // Xử lý nhập mã chế độ ở trạng thái SELECT_MODE
-      else if (currentScreen == SELECT_MODE) {
-        if ((key >= '0' && key <= '9') && enteredPassword.length() < 4) {
-          enteredPassword += key;
-          displaySelectMode();
-          Serial.print("Mode Code Input: ");
-          Serial.println(enteredPassword);
-          lastKeypadDebounceTime = millis();
-        } else if (key == '#') {
-          if (enteredPassword == "1111") {
-            currentMode = MANUAL;
-            digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang MANUAL
-            digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang MANUAL
-            digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang MANUAL
-            digitalWrite(RELAY_PIN, LOW); // Tắt relay
-            displayMessage("Manual Mode");
-            Serial.println("Switched to Manual Mode via Keypad (1111)");
-          } else if (enteredPassword == "2222") {
-            currentMode = AUTO;
-            digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang AUTO
-            digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang AUTO
-            digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang AUTO
-            digitalWrite(RELAY_PIN, LOW); // Tắt relay
-            displayMessage("Auto Mode");
-            Serial.println("Switched to Auto Mode via Keypad (2222)");
-          } else if (enteredPassword == "3333") {
-            currentMode = SETTING_TIME;
-            digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang SETTING_TIME
-            digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang SETTING_TIME
-            digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang SETTING_TIME
-            digitalWrite(RELAY_PIN, LOW); // Tắt relay
-            displayMessage("Set Time Mode");
-            Serial.println("Switched to Set Time Mode via Keypad (3333)");
-          } else {
-            displayMessage("Wrong Code");
-            Serial.println("Wrong Mode Code");
-            enteredPassword = "";
-            displaySelectMode();
-            lastKeypadDebounceTime = millis();
-            return;
+    }
+    // Xử lý nhập mật khẩu ở trạng thái ENTER_PASSWORD
+    else if (currentScreen == ENTER_PASSWORD) {
+      if ((key >= '0' && key <= '9') && enteredPassword.length() < 4) {
+        enteredPassword += key;
+        displayEnterPassword();
+        Serial.print("Password Input: ");
+        Serial.println(enteredPassword);
+        lastKeypadDebounceTime = millis();
+      } else if (key == '#') {
+        if (enteredPassword == requiredPassword) {
+          if (requiredPassword == "8888") {
+            isSystemLocked = false; // Mở khóa hệ thống
+            displayMessage("System Unlocked");
+            Serial.println("System Unlocked");
+          } else if (requiredPassword == "9999") {
+            isSystemLocked = true; // Khóa hệ thống
+            displayMessage("System Locked");
+            Serial.println("System Locked");
           }
           currentScreen = HOME;
           displayHome();
-          lastKeypadDebounceTime = millis();
+        } else {
+          displayMessage("Wrong Password");
+          Serial.println("Wrong Password");
+          enteredPassword = "";
+          displayEnterPassword();
         }
+        lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím A, B, C ở chế độ MANUAL
-      else if (currentMode == MANUAL && currentScreen == HOME) {
-        if (key == 'A') {
-          digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle LED_PIN
-          Serial.println(digitalRead(LED_PIN) ? "LED_PIN ON (Keypad A)" : "LED_PIN OFF (Keypad A)");
+    }
+    // Xử lý nhập mã chế độ ở trạng thái SELECT_MODE
+    else if (currentScreen == SELECT_MODE) {
+      if ((key >= '0' && key <= '9') && enteredPassword.length() < 4) {
+        enteredPassword += key;
+        displaySelectMode();
+        Serial.print("Mode Code Input: ");
+        Serial.println(enteredPassword);
+        lastKeypadDebounceTime = millis();
+      } else if (key == '#') {
+        if (enteredPassword == "1111") {
+          currentMode = MANUAL;
+          digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang MANUAL
+          digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang MANUAL
+          digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang MANUAL
+          digitalWrite(RELAY_PIN, LOW); // Tắt relay
+          displayMessage("Mode: Manual");
+          displayMode(); // Hiển thị chế độ thay vì về trang chủ
+          Serial.println("Switched to Manual Mode via Keypad (1111)");
+        } else if (enteredPassword == "2222") {
+          currentMode = AUTO;
+          digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang AUTO
+          digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang AUTO
+          digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang AUTO
+          digitalWrite(RELAY_PIN, LOW); // Tắt relay
+          displayMessage("Mode: Auto");
+          displayMode(); // Hiển thị chế độ thay vì về trang chủ
+          Serial.println("Switched to Auto Mode via Keypad (2222)");
+        } else if (enteredPassword == "3333") {
+          currentMode = SETTING_TIME;
+          digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang SETTING_TIME
+          digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang SETTING_TIME
+          digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang SETTING_TIME
+          digitalWrite(RELAY_PIN, LOW); // Tắt relay
+          displayMessage("Mode: Set Time");
+          displayMode(); // Hiển thị chế độ thay vì về trang chủ
+          Serial.println("Switched to Set Time Mode via Keypad (3333)");
+        } else {
+          displayMessage("Wrong Code");
+          Serial.println("Wrong Mode Code");
+          enteredPassword = "";
+          displaySelectMode();
           lastKeypadDebounceTime = millis();
-        } else if (key == 'B') {
-          digitalWrite(LED_1, !digitalRead(LED_1)); // Toggle LED_1 (xanh)
-          Serial.println(digitalRead(LED_1) ? "LED_1 ON (Keypad B)" : "LED_1 OFF (Keypad B)");
-          lastKeypadDebounceTime = millis();
-        } else if (key == 'C') {
-          digitalWrite(LED_2, !digitalRead(LED_2)); // Toggle LED_2 (đỏ)
-          Serial.println(digitalRead(LED_2) ? "LED_2 ON (Keypad C)" : "LED_2 OFF (Keypad C)");
-          lastKeypadDebounceTime = millis();
+          return;
         }
+        enteredPassword = ""; // Xóa mã đã nhập
+        lastKeypadDebounceTime = millis();
+      }
+    }
+    // Xử lý phím A, B, C ở chế độ MANUAL (bất kỳ màn hình nào)
+    if (currentMode == MANUAL && !isSystemLocked) {
+      if (key == 'A') {
+        digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle LED_PIN
+        Serial.println(digitalRead(LED_PIN) ? "LED_PIN ON (Keypad A)" : "LED_PIN OFF (Keypad A)");
+        displayDeviceStatus(digitalRead(LED_PIN) ? "Bat den" : "Tat den");
+        lastKeypadDebounceTime = millis();
+      } else if (key == 'B') {
+        digitalWrite(LED_1, !digitalRead(LED_1)); // Toggle LED_1 (xanh)
+        Serial.println(digitalRead(LED_1) ? "LED_1 ON (Keypad B)" : "LED_1 OFF (Keypad B)");
+        displayDeviceStatus(digitalRead(LED_1) ? "Bat may bom" : "Tat may bom");
+        lastKeypadDebounceTime = millis();
+      } else if (key == 'C') {
+        digitalWrite(LED_2, !digitalRead(LED_2)); // Toggle LED_2 (đỏ)
+        Serial.println(digitalRead(LED_2) ? "LED_2 ON (Keypad C)" : "LED_2 OFF (Keypad C)");
+        displayDeviceStatus(digitalRead(LED_2) ? "Bat quat" : "Tat quat");
+        lastKeypadDebounceTime = millis();
       }
     }
   }
+}
 
   // Xử lý cảm biến ánh sáng - Chỉ hoạt động ở chế độ AUTO
   if (currentMode == AUTO && currentScreen != MENU && currentScreen != LOCK_SYSTEM && 
