@@ -48,6 +48,7 @@ enum ScreenState {
 };
 
 // Biến toàn cục
+bool isSystemLocked = false; // Trạng thái khóa hệ thống, mặc định là mở
 Mode currentMode = MANUAL; // Chế độ mặc định
 ScreenState currentScreen = HOME; // Màn hình mặc định là trang chủ
 unsigned long lastDebounceTime = 0; // Thời gian debounce
@@ -236,15 +237,19 @@ void loop() {
 
   // Xử lý nút Manual (D6)
   if (manualState != lastManualState && millis() - lastDebounceTime > debounceDelay) {
-    if (manualState == LOW) { // Phát hiện cạnh xuống
-      currentMode = MANUAL;
-      currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
-      digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang MANUAL
-      digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang MANUAL
-      digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang MANUAL
-      Serial.println("LED OFF, LED_1 OFF, LED_2 OFF (Switched to Manual)");
-      displayMode();
-      Serial.println("Switched to Manual");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (manualState == LOW) { // Phát hiện cạnh xuống
+        currentMode = MANUAL;
+        currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
+        digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang MANUAL
+        digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang MANUAL
+        digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang MANUAL
+        Serial.println("LED OFF, LED_1 OFF, LED_2 OFF (Switched to Manual)");
+        displayMode();
+        Serial.println("Switched to Manual");
+      }
+    } else {
+      Serial.println("Manual Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -252,16 +257,20 @@ void loop() {
 
   // Xử lý nút Auto (D5)
   if (autoState != lastAutoState && millis() - lastDebounceTime > debounceDelay) {
-    if (autoState == LOW) { // Phát hiện cạnh xuống
-      currentMode = AUTO;
-      currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
-      digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang AUTO
-      digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang AUTO
-      digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang AUTO
-      digitalWrite(RELAY_PIN, LOW); // Tắt relay khi chuyển sang AUTO
-      Serial.println("LED OFF, LED_1 OFF, LED_2 OFF, Relay OFF (Switched to Auto)");
-      displayMode();
-      Serial.println("Switched to Auto");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (autoState == LOW) { // Phát hiện cạnh xuống
+        currentMode = AUTO;
+        currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
+        digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang AUTO
+        digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang AUTO
+        digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang AUTO
+        digitalWrite(RELAY_PIN, LOW); // Tắt relay khi chuyển sang AUTO
+        Serial.println("LED OFF, LED_1 OFF, LED_2 OFF, Relay OFF (Switched to Auto)");
+        displayMode();
+        Serial.println("Switched to Auto");
+      }
+    } else {
+      Serial.println("Auto Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -269,16 +278,20 @@ void loop() {
 
   // Xử lý nút Setting Time (D4)
   if (settingState != lastSettingState && millis() - lastDebounceTime > debounceDelay) {
-    if (settingState == LOW) { // Phát hiện cạnh xuống
-      currentMode = SETTING_TIME;
-      currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
-      digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang SETTING_TIME
-      digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang SETTING_TIME
-      digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang SETTING_TIME
-      digitalWrite(RELAY_PIN, LOW); // Tắt relay khi chuyển sang SETTING_TIME
-      Serial.println("LED OFF, LED_1 OFF, LED_2 OFF, Relay OFF (Switched to Setting Time)");
-      displayMode();
-      Serial.println("Switched to Set Time");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (settingState == LOW) { // Phát hiện cạnh xuống
+        currentMode = SETTING_TIME;
+        currentScreen = HOME; // Quay lại trang chủ khi chuyển chế độ
+        digitalWrite(LED_PIN, LOW); // Tắt LED khi chuyển sang SETTING_TIME
+        digitalWrite(LED_1, LOW);   // Tắt LED_1 khi chuyển sang SETTING_TIME
+        digitalWrite(LED_2, LOW);   // Tắt LED_2 khi chuyển sang SETTING_TIME
+        digitalWrite(RELAY_PIN, LOW); // Tắt relay khi chuyển sang SETTING_TIME
+        Serial.println("LED OFF, LED_1 OFF, LED_2 OFF, Relay OFF (Switched to Setting Time)");
+        displayMode();
+        Serial.println("Switched to Set Time");
+      }
+    } else {
+      Serial.println("Setting Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -286,13 +299,17 @@ void loop() {
 
   // Xử lý nút LED (D7) - Chỉ hoạt động ở chế độ MANUAL
   if (ledButtonState != lastLedButtonState && millis() - lastDebounceTime > debounceDelay) {
-    if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
-      if (ledButtonState == LOW) { // Phát hiện cạnh xuống
-        digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle LED
-        Serial.println(digitalRead(LED_PIN) ? "LED ON (Manual)" : "LED OFF (Manual)");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
+        if (ledButtonState == LOW) { // Phát hiện cạnh xuống
+          digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle LED
+          Serial.println(digitalRead(LED_PIN) ? "LED ON (Manual)" : "LED OFF (Manual)");
+        }
+      } else {
+        Serial.println("LED Button ignored: Not in Manual mode");
       }
     } else {
-      Serial.println("LED Button ignored: Not in Manual mode");
+      Serial.println("LED Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -300,15 +317,19 @@ void loop() {
 
   // Xử lý nút bật relay (PE13) - Chỉ hoạt động ở chế độ MANUAL
   if (relayOnState != lastRelayOnState && millis() - lastDebounceTime > debounceDelay) {
-    if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
-      if (relayOnState == LOW) { // Phát hiện cạnh xuống
-        digitalWrite(RELAY_PIN, HIGH); // Bật relay
-        digitalWrite(LED_1, HIGH);    // Bật LED PB6
-        digitalWrite(LED_2, LOW);     // Tắt LED PB2
-        Serial.println("Relay ON, LED PB6 ON, LED PB2 OFF");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
+        if (relayOnState == LOW) { // Phát hiện cạnh xuống
+          digitalWrite(RELAY_PIN, HIGH); // Bật relay
+          digitalWrite(LED_1, HIGH);    // Bật LED PB6
+          digitalWrite(LED_2, LOW);     // Tắt LED PB2
+          Serial.println("Relay ON, LED PB6 ON, LED PB2 OFF");
+        }
+      } else {
+        Serial.println("Relay On Button ignored: Not in Manual mode");
       }
     } else {
-      Serial.println("Relay On Button ignored: Not in Manual mode");
+      Serial.println("Relay On Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -316,15 +337,19 @@ void loop() {
 
   // Xử lý nút tắt relay (PF15) - Chỉ hoạt động ở chế độ MANUAL
   if (relayOffState != lastRelayOffState && millis() - lastDebounceTime > debounceDelay) {
-    if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
-      if (relayOffState == LOW) { // Phát hiện cạnh xuống
-        digitalWrite(RELAY_PIN, LOW);  // Tắt relay
-        digitalWrite(LED_1, LOW);     // Tắt LED PB6
-        digitalWrite(LED_2, HIGH);    // Bật LED PB2
-        Serial.println("Relay OFF, LED PB6 OFF, LED PB2 ON");
+    if (!isSystemLocked) { // Chỉ xử lý khi hệ thống không bị khóa
+      if (currentMode == MANUAL) { // Chỉ xử lý khi ở chế độ MANUAL
+        if (relayOffState == LOW) { // Phát hiện cạnh xuống
+          digitalWrite(RELAY_PIN, LOW);  // Tắt relay
+          digitalWrite(LED_1, LOW);     // Tắt LED PB6
+          digitalWrite(LED_2, HIGH);    // Bật LED PB2
+          Serial.println("Relay OFF, LED PB6 OFF, LED PB2 ON");
+        }
+      } else {
+        Serial.println("Relay Off Button ignored: Not in Manual mode");
       }
     } else {
-      Serial.println("Relay Off Button ignored: Not in Manual mode");
+      Serial.println("Relay Off Button ignored: System is locked");
     }
     lastDebounceTime = millis();
   }
@@ -383,9 +408,15 @@ void loop() {
           lastKeypadDebounceTime = millis();
         } else if (key == '#') {
           if (enteredPassword == requiredPassword) {
-            String message = requiredPassword == "8888" ? "System Unlocked" : "System Locked";
-            displayMessage(message);
-            Serial.println(message);
+            if (requiredPassword == "8888") {
+              isSystemLocked = false; // Mở khóa hệ thống
+              displayMessage("System Unlocked");
+              Serial.println("System Unlocked");
+            } else if (requiredPassword == "9999") {
+              isSystemLocked = true; // Khóa hệ thống
+              displayMessage("System Locked");
+              Serial.println("System Locked");
+            }
             currentScreen = HOME;
             displayHome();
           } else {
