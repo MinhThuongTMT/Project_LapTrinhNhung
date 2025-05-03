@@ -443,16 +443,14 @@ void controlDevicesByTime()
     
     if (shouldBeOn) {
       digitalWrite(RELAY_FAN, LOW);
-      digitalWrite(LED_2, HIGH);
-      digitalWrite(LED_1, LOW);
-      Serial.println("ON");
-      displayDeviceStatus("Bat quat");
-    } else {
-      digitalWrite(RELAY_FAN, HIGH);
       digitalWrite(LED_2, LOW);
       digitalWrite(LED_1, HIGH);
+      Serial.println("ON");
+    } else {
+      digitalWrite(RELAY_FAN, HIGH);
+      digitalWrite(LED_2, HIGH);
+      digitalWrite(LED_1, LOW);
       Serial.println("OFF");
-      displayDeviceStatus("Tat quat");
     }
   } else {
     Serial.println("Quat: No schedule set");
@@ -482,13 +480,11 @@ void controlDevicesByTime()
       digitalWrite(LED_1, HIGH);
       digitalWrite(LED_2, LOW);
       Serial.println("ON");
-      displayDeviceStatus("Bat may bom");
     } else {
       digitalWrite(RELAY_PIN, HIGH);
       digitalWrite(LED_1, LOW);
       digitalWrite(LED_2, HIGH);
       Serial.println("OFF");
-      displayDeviceStatus("Tat may bom");
     }
   } else {
     Serial.println("May bom: No schedule set");
@@ -756,7 +752,7 @@ void loop()
   lastLedButtonState = ledButtonState;
 
   handleButton(BUTTON_RELAY_ON, lastRelayOnState, RELAY_PIN, LED_1, LED_2, "may bom");
-  handleButton(BUTTON_RELAY_OFF, lastRelayOffState, RELAY_FAN, LED_2, LED_1, "quat");
+  handleButton(BUTTON_RELAY_OFF, lastRelayOffState, RELAY_FAN, LED_1, LED_2, "quat");
 
   if (millis() - lastKeypadDebounceTime > debounceDelay)
   {
