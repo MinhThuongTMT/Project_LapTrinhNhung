@@ -54,7 +54,9 @@ enum ScreenState
   MENU,
   LOCK_SYSTEM,
   ENTER_PASSWORD,
-  SELECT_MODE
+  SELECT_MODE,
+  SET_TIME_MENU,    // Added for device selection
+  SET_TIME_INPUT    // Added for time input
 };
 
 // Biến toàn cục
@@ -74,6 +76,23 @@ String enteredPassword = "";              // Mật khẩu đang nhập
 String requiredPassword = "";             // Mật khẩu yêu cầu
 unsigned long lastDistanceMeasureTime = 0; // Thời gian đo khoảng cách cuối cùng
 const unsigned long distanceMeasureInterval = 1000; // Đo mỗi 1 giây
+
+// Variables for Setting Time mode
+int selectedDevice = 0; // 1: Den, 2: Quat, 3: May bom nuoc
+int inputPhase = 0;     // 0: entering on time, 1: entering off time
+String timeInput = "";
+int onHour = -1, onMinute = -1, offHour = -1, offMinute = -1;
+
+struct DeviceTime {
+  int onHour;
+  int onMinute;
+  int offHour;
+  int offMinute;
+};
+
+DeviceTime denTime = {-1, -1, -1, -1};
+DeviceTime quatTime = {-1, -1, -1, -1};
+DeviceTime mayBomTime = {-1, -1, -1, -1};
 
 // Hàm hiển thị trang chủ
 void displayHome()
@@ -183,10 +202,55 @@ void displayMode()
     modeText = "Mode: Set Time";
     break;
   }
-  // Căn giữa: LCD 20 ký tự, thêm khoảng trắng ở đầu
   int padding = (20 - modeText.length()) / 2;
   lcd.setCursor(padding, 0);
   lcd.print(modeText);
+}
+
+// Hàm hiển thị menu chọn thiết bị
+void displaySetTimeMenu()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Chon thiet bi");
+  lcd.setCursor(0, 1);
+  lcd.print("1. Den");
+  lcd.setCursor(0, 2);
+  lcd.print("2. Quat");
+  lcd.setCursor(0, 3);
+  lcd.print("3. May bom nuoc");
+}
+
+// Hàm hiển thị giao diện nhập thời gian
+void displaySetTimeInput()
+{
+  lcd.clear();
+  String deviceName;
+  if (selectedDevice == 1) deviceName = "Den";
+  else if (selectedDevice == 2) deviceName = "Quat";
+  else if (selectedDevice == 3) deviceName = "May bom nuoc";
+  lcd.setCursor(0, 0);
+  lcd.print("Thiet bi: " + deviceName);
+
+  if (inputPhase == 0) {
+    String onStr = timeInput;
+    while (onStr.length() < 4) onStr += " ";
+    onStr = onStr.substring(0, 2) + ":" + onStr.substring(2, 4);
+    lcd.setCursor(0, 1);
+    lcd.print("Bat: " + onStr);
+    lcd.setCursor(0, 2);
+    lcd.print("Tat: ");
+  } else if (inputPhase == 1) {
+    String onStr = String(onHour / 10) + String(onHour % 10) + ":" + 
+                   String(onMinute / 10) + String(onMinute % 10);
+    lcd.setCursor(0, 1);
+    lcd.print("Bat: " + onStr);
+    String offStr = timeInput;
+    while (offStr.length() < 4) offStr += " ";
+    offStr = offStr.substring(0, 2) + ":" + offStr.substring(2, 4);
+    lcd.setCursor(0, 2);
+    lcd.print("Tat: " + offStr);
+  }
 }
 
 // Hàm quét bàn phím ma trận
@@ -195,22 +259,16 @@ char scanKeypad()
   char key = '\0';
   for (int row = 0; row < KEYPAD_NUMBER_OF_ROWS; row++)
   {
-    // Đặt tất cả hàng thành HIGH
     for (int r = 0; r < KEYPAD_NUMBER_OF_ROWS; r++)
     {
       digitalWrite(keypadRowPins[r], HIGH);
     }
-    // Đặt hàng hiện tại thành LOW
     digitalWrite(keypadRowPins[row], LOW);
-
-    // Đọc các cột
     for (int col = 0; col < KEYPAD_NUMBER_OF_COLS; col++)
     {
       if (digitalRead(keypadColPins[col]) == LOW)
       {
-        // Phát hiện phím được nhấn
         key = keypad[row][col];
-        // Chờ nhả phím để tránh lặp
         while (digitalRead(keypadColPins[col]) == LOW)
         {
           delay(10);
@@ -232,11 +290,11 @@ float measureDistance()
   digitalWrite(TRIG_PIN, LOW);
 
   unsigned long duration = pulseIn(ECHO_PIN, HIGH);
-  float distance = (duration / 2.0) * 0.0343; // Tính khoảng cách (cm)
+  float distance = (duration / 2.0) * 0.0343;
   return distance;
 }
 
-// Hàm xử lý nút nhấn chung (đã sửa cho relay active LOW)
+// Hàm xử lý nút nhấn chung
 void handleButton(int buttonPin, int &lastState, int relayPin, int ledOnPin, int ledOffPin, String deviceName)
 {
   int buttonState = digitalRead(buttonPin);
@@ -246,22 +304,19 @@ void handleButton(int buttonPin, int &lastState, int relayPin, int ledOnPin, int
     {
       if (buttonState == LOW)
       {
-        // Toggle relay (đảo trạng thái)
         bool currentRelayState = digitalRead(relayPin);
         digitalWrite(relayPin, !currentRelayState);
-        
-        // Với relay active LOW, relay bật khi relayPin == LOW
-        if (digitalRead(relayPin) == LOW)  // Relay đang bật
+        if (digitalRead(relayPin) == LOW)
         {
-          digitalWrite(ledOnPin, HIGH);  // Bật LED chỉ thị bật
-          digitalWrite(ledOffPin, LOW);  // Tắt LED chỉ thị tắt
+          digitalWrite(ledOnPin, HIGH);
+          digitalWrite(ledOffPin, LOW);
           Serial.println(deviceName + " ON, LED ON, LED OFF");
           displayDeviceStatus("Bat " + deviceName);
         }
-        else  // Relay đang tắt
+        else
         {
-          digitalWrite(ledOnPin, LOW);   // Tắt LED chỉ thị bật
-          digitalWrite(ledOffPin, HIGH); // Bật LED chỉ thị tắt
+          digitalWrite(ledOnPin, LOW);
+          digitalWrite(ledOffPin, HIGH);
           Serial.println(deviceName + " OFF, LED OFF, LED ON");
           displayDeviceStatus("Tat " + deviceName);
         }
@@ -278,20 +333,12 @@ void handleButton(int buttonPin, int &lastState, int relayPin, int ledOnPin, int
 
 void setup()
 {
-  // Khởi tạo Serial để debug
   Serial.begin(115200);
-
-  // Khởi tạo I2C
-  Wire.begin(); // I2C1: PB8 (SCL), PB9 (SDA)
-
-  // Khởi tạo LCD
+  Wire.begin();
   lcd.init();
   lcd.backlight();
-
-  // Hiển thị trang chủ
   displayHome();
 
-  // Cấu hình chân nút nhấn
   pinMode(BUTTON_MANUAL, INPUT_PULLUP);
   pinMode(BUTTON_AUTO, INPUT_PULLUP);
   pinMode(BUTTON_SETTING, INPUT_PULLUP);
@@ -299,37 +346,31 @@ void setup()
   pinMode(BUTTON_RELAY_ON, INPUT_PULLUP);
   pinMode(BUTTON_RELAY_OFF, INPUT_PULLUP);
 
-  // Cấu hình chân LED và relay
   pinMode(LED_PIN, OUTPUT);
   pinMode(LED_1, OUTPUT);
   pinMode(LED_2, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(RELAY_FAN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);   // Tắt LED ban đầu
-  digitalWrite(LED_1, LOW);     // Tắt LED 1 ban đầu
-  digitalWrite(LED_2, LOW);     // Tắt LED 2 ban đầu
-  digitalWrite(RELAY_PIN, HIGH); // Tắt relay máy bơm ban đầu (active LOW)
-  digitalWrite(RELAY_FAN, HIGH); // Tắt relay quạt ban đầu (active LOW)
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_1, LOW);
+  digitalWrite(LED_2, LOW);
+  digitalWrite(RELAY_PIN, HIGH);
+  digitalWrite(RELAY_FAN, HIGH);
 
-  // Kiểm tra trạng thái relay ban đầu
   if (digitalRead(RELAY_FAN) != HIGH)
   {
     digitalWrite(RELAY_FAN, HIGH);
     Serial.println("Initialized Relay PH1 to OFF");
   }
 
-  // Cấu hình chân cảm biến ánh sáng
   pinMode(LIGHT_SENSOR, INPUT);
-
-  // Cấu hình chân cảm biến khoảng cách
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  // Cấu hình chân bàn phím
   for (int i = 0; i < KEYPAD_NUMBER_OF_ROWS; i++)
   {
     pinMode(keypadRowPins[i], OUTPUT);
-    digitalWrite(keypadRowPins[i], HIGH); // Mặc định HIGH
+    digitalWrite(keypadRowPins[i], HIGH);
   }
   for (int i = 0; i < KEYPAD_NUMBER_OF_COLS; i++)
   {
@@ -339,7 +380,6 @@ void setup()
 
 void loop()
 {
-  // Đọc trạng thái nút nhấn
   int manualState = digitalRead(BUTTON_MANUAL);
   int autoState = digitalRead(BUTTON_AUTO);
   int settingState = digitalRead(BUTTON_SETTING);
@@ -347,7 +387,6 @@ void loop()
   int relayOnState = digitalRead(BUTTON_RELAY_ON);
   int relayOffState = digitalRead(BUTTON_RELAY_OFF);
 
-  // Debug: In trạng thái nút
   if (manualState != lastManualState || autoState != lastAutoState ||
       settingState != lastSettingState || ledButtonState != lastLedButtonState ||
       relayOnState != lastRelayOnState || relayOffState != lastRelayOffState)
@@ -366,7 +405,6 @@ void loop()
     Serial.println(relayOffState);
   }
 
-  // Xử lý nút Manual (D6)
   if (manualState != lastManualState && millis() - lastDebounceTime > debounceDelay)
   {
     if (!isSystemLocked)
@@ -393,7 +431,6 @@ void loop()
   }
   lastManualState = manualState;
 
-  // Xử lý nút Auto (D5)
   if (autoState != lastAutoState && millis() - lastDebounceTime > debounceDelay)
   {
     if (!isSystemLocked)
@@ -420,7 +457,6 @@ void loop()
   }
   lastAutoState = autoState;
 
-  // Xử lý nút Setting Time (D4)
   if (settingState != lastSettingState && millis() - lastDebounceTime > debounceDelay)
   {
     if (!isSystemLocked)
@@ -428,7 +464,7 @@ void loop()
       if (settingState == LOW)
       {
         currentMode = SETTING_TIME;
-        currentScreen = HOME;
+        currentScreen = SET_TIME_MENU;
         digitalWrite(LED_PIN, LOW);
         digitalWrite(LED_1, LOW);
         digitalWrite(LED_2, LOW);
@@ -436,6 +472,8 @@ void loop()
         digitalWrite(RELAY_FAN, HIGH);
         Serial.println("LED OFF, LED_1 OFF, LED_2 OFF, Relays OFF (Switched to Setting Time)");
         displayMode();
+        delay(1000);
+        displaySetTimeMenu();
         Serial.println("Switched to Set Time");
       }
     }
@@ -447,7 +485,6 @@ void loop()
   }
   lastSettingState = settingState;
 
-  // Xử lý nút LED (D7) - Chỉ hoạt động ở chế độ MANUAL
   if (ledButtonState != lastLedButtonState && millis() - lastDebounceTime > debounceDelay)
   {
     if (!isSystemLocked)
@@ -474,19 +511,14 @@ void loop()
   }
   lastLedButtonState = ledButtonState;
 
-  // Xử lý nút nhấn PE13 cho relay PF2 (máy bơm)
   handleButton(BUTTON_RELAY_ON, lastRelayOnState, RELAY_PIN, LED_1, LED_2, "may bom");
-
-  // Xử lý nút nhấn PF15 cho relay PH1 (quạt)
   handleButton(BUTTON_RELAY_OFF, lastRelayOffState, RELAY_FAN, LED_2, LED_1, "quat");
 
-  // Xử lý bàn phím ma trận
   if (millis() - lastKeypadDebounceTime > debounceDelay)
   {
     char key = scanKeypad();
     if (key != '\0')
     {
-      // Xử lý phím '*' ở trạng thái HOME
       if (key == '*' && currentScreen == HOME)
       {
         currentScreen = MENU;
@@ -494,7 +526,6 @@ void loop()
         Serial.println("Switched to Menu");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '*' ở trạng thái SELECT_MODE để quay về MENU
       else if (key == '*' && currentScreen == SELECT_MODE)
       {
         currentScreen = MENU;
@@ -503,7 +534,6 @@ void loop()
         Serial.println("Returned to Menu from Select Mode");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '4' ở trạng thái MENU
       else if (key == '4' && currentScreen == MENU)
       {
         currentScreen = HOME;
@@ -511,7 +541,6 @@ void loop()
         Serial.println("Returned to Home");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '2' ở trạng thái MENU
       else if (key == '2' && currentScreen == MENU)
       {
         currentScreen = LOCK_SYSTEM;
@@ -519,7 +548,6 @@ void loop()
         Serial.println("Switched to Lock System");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '1' ở trạng thái MENU (Chọn chế độ)
       else if (key == '1' && currentScreen == MENU)
       {
         currentScreen = SELECT_MODE;
@@ -528,7 +556,6 @@ void loop()
         Serial.println("Switched to Select Mode");
         lastKeypadDebounceTime = millis();
       }
-      // Xử lý phím '1' hoặc '2' ở trạng thái LOCK_SYSTEM
       else if (currentScreen == LOCK_SYSTEM)
       {
         if (key == '1')
@@ -550,7 +577,6 @@ void loop()
           lastKeypadDebounceTime = millis();
         }
       }
-      // Xử lý nhập mật khẩu ở trạng thái ENTER_PASSWORD
       else if (currentScreen == ENTER_PASSWORD)
       {
         if ((key >= '0' && key <= '9') && enteredPassword.length() < 4)
@@ -567,13 +593,13 @@ void loop()
           {
             if (requiredPassword == "8888")
             {
-              isSystemLocked = false; // Mở khóa hệ thống
+              isSystemLocked = false;
               displayMessage("System Unlocked");
               Serial.println("System Unlocked");
             }
             else if (requiredPassword == "9999")
             {
-              isSystemLocked = true; // Khóa hệ thống
+              isSystemLocked = true;
               displayMessage("System Locked");
               Serial.println("System Locked");
             }
@@ -590,7 +616,6 @@ void loop()
           lastKeypadDebounceTime = millis();
         }
       }
-      // Xử lý nhập mã chế độ ở trạng thái SELECT_MODE
       else if (currentScreen == SELECT_MODE)
       {
         if ((key >= '0' && key <= '9') && enteredPassword.length() < 4)
@@ -636,7 +661,8 @@ void loop()
             digitalWrite(RELAY_PIN, HIGH);
             digitalWrite(RELAY_FAN, HIGH);
             displayMessage("Mode: Set Time");
-            displayMode();
+            currentScreen = SET_TIME_MENU;
+            displaySetTimeMenu();
             Serial.println("Switched to Set Time Mode via Keypad (3333)");
           }
           else
@@ -659,7 +685,127 @@ void loop()
           lastKeypadDebounceTime = millis();
         }
       }
-      // Xử lý phím A, B, C ở chế độ MANUAL (bất kỳ màn hình nào)
+      else if (currentScreen == SET_TIME_MENU)
+      {
+        if (key == '1' || key == '2' || key == '3')
+        {
+          selectedDevice = key - '0';
+          inputPhase = 0;
+          timeInput = "";
+          onHour = -1;
+          onMinute = -1;
+          offHour = -1;
+          offMinute = -1;
+          currentScreen = SET_TIME_INPUT;
+          displaySetTimeInput();
+        }
+        else if (key == '*')
+        {
+          currentScreen = HOME;
+          displayHome();
+        }
+      }
+      else if (currentScreen == SET_TIME_INPUT)
+      {
+        if (key >= '0' && key <= '9' && timeInput.length() < 4)
+        {
+          timeInput += key;
+          displaySetTimeInput();
+        }
+        else if (key == 'A' && timeInput.length() > 0)
+        {
+          timeInput = timeInput.substring(0, timeInput.length() - 1);
+          displaySetTimeInput();
+        }
+        else if (key == 'C')
+        {
+          timeInput = "";
+          displaySetTimeInput();
+        }
+        else if (key == '#')
+        {
+          if (timeInput.length() == 4)
+          {
+            int hh = timeInput.substring(0, 2).toInt();
+            int mm = timeInput.substring(2, 4).toInt();
+            if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59)
+            {
+              if (inputPhase == 0)
+              {
+                onHour = hh;
+                onMinute = mm;
+                inputPhase = 1;
+                timeInput = "";
+                displaySetTimeInput();
+              }
+              else if (inputPhase == 1)
+              {
+                offHour = hh;
+                offMinute = mm;
+                if (onHour * 60 + onMinute < offHour * 60 + offMinute)
+                {
+                  if (selectedDevice == 1)
+                  {
+                    denTime.onHour = onHour;
+                    denTime.onMinute = onMinute;
+                    denTime.offHour = offHour;
+                    denTime.offMinute = offMinute;
+                  }
+                  else if (selectedDevice == 2)
+                  {
+                    quatTime.onHour = onHour;
+                    quatTime.onMinute = onMinute;
+                    quatTime.offHour = offHour;
+                    quatTime.offMinute = offMinute;
+                  }
+                  else if (selectedDevice == 3)
+                  {
+                    mayBomTime.onHour = onHour;
+                    mayBomTime.onMinute = onMinute;
+                    mayBomTime.offHour = offHour;
+                    mayBomTime.offMinute = offMinute;
+                  }
+                  lcd.setCursor(0, 3);
+                  lcd.print("cai dat thanh cong");
+                  delay(2000);
+                  currentScreen = SET_TIME_MENU;
+                  displaySetTimeMenu();
+                }
+                else
+                {
+                  lcd.setCursor(0, 3);
+                  lcd.print("cai dat khong thanh ");
+                  delay(2000);
+                  inputPhase = 0;
+                  timeInput = "";
+                  displaySetTimeInput();
+                }
+              }
+            }
+            else
+            {
+              lcd.setCursor(0, 3);
+              lcd.print("Thoi gian khong hop le");
+              delay(2000);
+              lcd.setCursor(0, 3);
+              lcd.print("                    ");
+            }
+          }
+          else
+          {
+            lcd.setCursor(0, 3);
+            lcd.print("Nhap 4 so");
+            delay(2000);
+            lcd.setCursor(0, 3);
+            lcd.print("                    ");
+          }
+        }
+        else if (key == '*')
+        {
+          currentScreen = SET_TIME_MENU;
+          displaySetTimeMenu();
+        }
+      }
       if (currentMode == MANUAL && !isSystemLocked)
       {
         if (key == 'A')
@@ -691,7 +837,6 @@ void loop()
     }
   }
 
-  // Xử lý cảm biến ánh sáng - Chỉ hoạt động ở chế độ AUTO
   if (currentMode == AUTO && currentScreen != MENU && currentScreen != LOCK_SYSTEM &&
       currentScreen != ENTER_PASSWORD && currentScreen != SELECT_MODE)
   {
@@ -711,7 +856,6 @@ void loop()
     }
   }
 
-  // Xử lý cảm biến khoảng cách để điều khiển máy bơm - Chỉ hoạt động ở chế độ AUTO
   if (currentMode == AUTO && !isSystemLocked && (millis() - lastDistanceMeasureTime > distanceMeasureInterval))
   {
     float distance = measureDistance();
@@ -721,18 +865,18 @@ void loop()
 
     if (distance > PUMP_ON_DISTANCE)
     {
-      digitalWrite(RELAY_PIN, LOW);  // Bật máy bơm (active LOW)
+      digitalWrite(RELAY_PIN, LOW);
       digitalWrite(LED_1, HIGH);
       digitalWrite(LED_2, LOW);
-      digitalWrite(RELAY_FAN, HIGH); // Tắt quạt
+      digitalWrite(RELAY_FAN, HIGH);
       Serial.println("Pump ON, LED1 ON, LED2 OFF, Fan OFF");
     }
     else if (distance < PUMP_OFF_DISTANCE)
     {
-      digitalWrite(RELAY_PIN, HIGH); // Tắt máy bơm (active LOW)
+      digitalWrite(RELAY_PIN, HIGH);
       digitalWrite(LED_1, LOW);
       digitalWrite(LED_2, HIGH);
-      digitalWrite(RELAY_FAN, HIGH); // Tắt quạt
+      digitalWrite(RELAY_FAN, HIGH);
       Serial.println("Pump OFF, LED1 OFF, LED2 ON, Fan OFF");
     }
     lastDistanceMeasureTime = millis();
