@@ -55,27 +55,34 @@ enum ScreenState
   LOCK_SYSTEM,
   ENTER_PASSWORD,
   SELECT_MODE,
-  SET_TIME_MENU,    // Added for device selection
-  SET_TIME_INPUT    // Added for time input
+  SET_TIME_MENU,
+  SET_TIME_INPUT,
+  SET_CURRENT_TIME
 };
 
 // Biến toàn cục
-bool isSystemLocked = false;              // Trạng thái khóa hệ thống, mặc định là mở
+bool isSystemLocked = false;              // Trạng thái khóa hệ thống
 Mode currentMode = MANUAL;                // Chế độ mặc định
-ScreenState currentScreen = HOME;         // Màn hình mặc định là trang chủ
+ScreenState currentScreen = HOME;         // Màn hình mặc định
 unsigned long lastDebounceTime = 0;       // Thời gian debounce
 const unsigned long debounceDelay = 100;  // Độ trễ debounce (ms)
 int lastManualState = HIGH;               // Trạng thái trước của nút Manual
 int lastAutoState = HIGH;                 // Trạng thái trước của nút Auto
 int lastSettingState = HIGH;              // Trạng thái trước của nút Setting
 int lastLedButtonState = HIGH;            // Trạng thái trước của nút LED
-int lastRelayOnState = HIGH;              // Trạng thái trước của nút điều khiển relay PF2
-int lastRelayOffState = HIGH;             // Trạng thái trước của nút điều khiển relay PH1
+int lastRelayOnState = HIGH;              // Trạng thái trước của nút relay PF2
+int lastRelayOffState = HIGH;             // Trạng thái trước của nút relay PH1
 unsigned long lastKeypadDebounceTime = 0; // Thời gian debounce bàn phím
 String enteredPassword = "";              // Mật khẩu đang nhập
 String requiredPassword = "";             // Mật khẩu yêu cầu
-unsigned long lastDistanceMeasureTime = 0; // Thời gian đo khoảng cách cuối cùng
+unsigned long lastDistanceMeasureTime = 0; // Thời gian đo khoảng cách cuối
 const unsigned long distanceMeasureInterval = 1000; // Đo mỗi 1 giây
+
+// Biến cho cài đặt thời gian hiện tại
+String currentTimeInput = "";
+int currentInputPhase = 0; // 0: hour, 1: minute
+unsigned long timeSetMillis = 0;  // Thời điểm cài đặt thời gian (millis)
+long currentTimeSeconds = -1;     // Thời gian hiện tại tính bằng giây từ 00:00
 
 // Variables for Setting Time mode
 int selectedDevice = 0; // 1: Den, 2: Quat, 3: May bom nuoc
@@ -98,11 +105,11 @@ DeviceTime mayBomTime = {-1, -1, -1, -1};
 void displayHome()
 {
   lcd.clear();
-  lcd.setCursor(7, 0); // Căn giữa "PTIT" (4 ký tự)
+  lcd.setCursor(7, 0);
   lcd.print("PTIT");
-  lcd.setCursor(2, 1); // Căn giữa "TRANMINHTHUONG" (14 ký tự)
+  lcd.setCursor(2, 1);
   lcd.print("TRAN MINH THUONG");
-  lcd.setCursor(5, 2); // Căn giữa "N21DCVT101" (10 ký tự)
+  lcd.setCursor(5, 2);
   lcd.print("N21DCVT101");
   lcd.setCursor(3, 3);
   lcd.print("- SMART HOME -");
@@ -164,28 +171,28 @@ void displaySelectMode()
   lcd.print(displayPassword);
 }
 
-// Hàm hiển thị thông báo thành công hoặc lỗi
+// Hàm hiển thị thông báo
 void displayMessage(String message)
 {
   lcd.clear();
   lcd.setCursor(5, 0);
   lcd.print(message);
-  delay(2000); // Hiển thị thông báo trong 2 giây
+  delay(2000);
 }
 
 // Hàm hiển thị trạng thái thiết bị tạm thời
 void displayDeviceStatus(String status)
 {
-  lcd.setCursor(6, 2);               // Hiển thị ở dòng 2
-  lcd.print("                    "); // Xóa dòng 2
+  lcd.setCursor(6, 2);
+  lcd.print("                    ");
   lcd.setCursor(6, 2);
   lcd.print(status);
-  delay(2000); // Hiển thị trạng thái trong 2 giây
+  delay(2000);
   lcd.setCursor(6, 2);
-  lcd.print("                    "); // Xóa dòng 2 sau khi hiển thị
+  lcd.print("                    ");
 }
 
-// Hàm hiển thị chế độ căn giữa trên dòng 0
+// Hàm hiển thị chế độ
 void displayMode()
 {
   lcd.clear();
@@ -221,7 +228,7 @@ void displaySetTimeMenu()
   lcd.print("3. May bom nuoc");
 }
 
-// Hàm hiển thị giao diện nhập thời gian
+// Hàm hiển thị giao diện nhập thời gian thiết bị
 void displaySetTimeInput()
 {
   lcd.clear();
@@ -250,6 +257,27 @@ void displaySetTimeInput()
     offStr = offStr.substring(0, 2) + ":" + offStr.substring(2, 4);
     lcd.setCursor(0, 2);
     lcd.print("Tat: " + offStr);
+  }
+}
+
+// Hàm hiển thị giao diện cài đặt thời gian hiện tại
+void displaySetCurrentTime()
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Cai dat thoi gian");
+  lcd.setCursor(0, 1);
+  String timeStr = currentTimeInput;
+  if (currentInputPhase == 0) {
+    while (timeStr.length() < 2) timeStr += " ";
+    lcd.print("Gio: " + timeStr);
+    lcd.setCursor(0, 2);
+    lcd.print("Phut: ");
+  } else if (currentInputPhase == 1) {
+    lcd.print("Gio: " + String(currentTimeInput.substring(0, 2)));
+    lcd.setCursor(0, 2);
+    while (timeStr.length() < 4) timeStr += " ";
+    lcd.print("Phut: " + timeStr.substring(2));
   }
 }
 
@@ -285,7 +313,9 @@ float measureDistance()
 {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
-  digitalWrite(TRIG_PIN, HIGH);
+ 
+
+ digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
@@ -329,6 +359,141 @@ void handleButton(int buttonPin, int &lastState, int relayPin, int ledOnPin, int
     lastDebounceTime = millis();
   }
   lastState = buttonState;
+}
+
+// Hàm tính thời gian hiện tại (giây kể từ 00:00)
+long getCurrentTimeSeconds()
+{
+  if (currentTimeSeconds == -1) return -1; // Chưa cài đặt thời gian
+  unsigned long elapsedMillis = millis() - timeSetMillis;
+  long elapsedSeconds = elapsedMillis / 1000;
+  long totalSeconds = currentTimeSeconds + elapsedSeconds;
+  long currentDaySeconds = totalSeconds % 86400; // Lấy dư để quay lại 0 sau 24 giờ
+  // Debug: In thời gian hiện tại
+  Serial.print("Current time (seconds): ");
+  Serial.print(currentDaySeconds);
+  Serial.print(" (");
+  Serial.print(currentDaySeconds / 3600);
+  Serial.print(":");
+  Serial.print((currentDaySeconds % 3600) / 60);
+  Serial.println(")");
+  return currentDaySeconds;
+}
+
+// Hàm kiểm tra và điều khiển thiết bị dựa trên thời gian
+void controlDevicesByTime()
+{
+  if (currentTimeSeconds == -1) {
+    Serial.println("Time not set, skipping device control");
+    return; // Chưa cài đặt thời gian
+  }
+
+  long currentSeconds = getCurrentTimeSeconds();
+  if (currentSeconds == -1) return;
+
+  // Kiểm tra đèn
+  if (denTime.onHour != -1) {
+    long onSeconds = denTime.onHour * 3600 + denTime.onMinute * 60;
+    long offSeconds = denTime.offHour * 3600 + denTime.offMinute * 60;
+    Serial.print("Den: on=");
+    Serial.print(onSeconds);
+    Serial.print("s, off=");
+    Serial.print(offSeconds);
+    Serial.print("s, current=");
+    Serial.print(currentSeconds);
+    Serial.print("s, state=");
+    
+    bool shouldBeOn = false;
+    if (onSeconds <= offSeconds) {
+      shouldBeOn = (currentSeconds >= onSeconds && currentSeconds < offSeconds);
+    } else {
+      shouldBeOn = (currentSeconds >= onSeconds || currentSeconds < offSeconds);
+    }
+    
+    if (shouldBeOn) {
+      digitalWrite(LED_PIN, HIGH);
+      Serial.println("ON");
+      displayDeviceStatus("Bat den");
+    } else {
+      digitalWrite(LED_PIN, LOW);
+      Serial.println("OFF");
+      displayDeviceStatus("Tat den");
+    }
+  } else {
+    Serial.println("Den: No schedule set");
+  }
+
+  // Kiểm tra quạt
+  if (quatTime.onHour != -1) {
+    long onSeconds = quatTime.onHour * 3600 + quatTime.onMinute * 60;
+    long offSeconds = quatTime.offHour * 3600 + quatTime.offMinute * 60;
+    Serial.print("Quat: on=");
+    Serial.print(onSeconds);
+    Serial.print("s, off=");
+    Serial.print(offSeconds);
+    Serial.print("s, current=");
+    Serial.print(currentSeconds);
+    Serial.print("s, state=");
+    
+    bool shouldBeOn = false;
+    if (onSeconds <= offSeconds) {
+      shouldBeOn = (currentSeconds >= onSeconds && currentSeconds < offSeconds);
+    } else {
+      shouldBeOn = (currentSeconds >= onSeconds || currentSeconds < offSeconds);
+    }
+    
+    if (shouldBeOn) {
+      digitalWrite(RELAY_FAN, LOW);
+      digitalWrite(LED_2, HIGH);
+      digitalWrite(LED_1, LOW);
+      Serial.println("ON");
+      displayDeviceStatus("Bat quat");
+    } else {
+      digitalWrite(RELAY_FAN, HIGH);
+      digitalWrite(LED_2, LOW);
+      digitalWrite(LED_1, HIGH);
+      Serial.println("OFF");
+      displayDeviceStatus("Tat quat");
+    }
+  } else {
+    Serial.println("Quat: No schedule set");
+  }
+
+  // Kiểm tra máy bơm
+  if (mayBomTime.onHour != -1) {
+    long onSeconds = mayBomTime.onHour * 3600 + mayBomTime.onMinute * 60;
+    long offSeconds = mayBomTime.offHour * 3600 + mayBomTime.offMinute * 60;
+    Serial.print("May bom: on=");
+    Serial.print(onSeconds);
+    Serial.print("s, off=");
+    Serial.print(offSeconds);
+    Serial.print("s, current=");
+    Serial.print(currentSeconds);
+    Serial.print("s, state=");
+    
+    bool shouldBeOn = false;
+    if (onSeconds <= offSeconds) {
+      shouldBeOn = (currentSeconds >= onSeconds && currentSeconds < offSeconds);
+    } else {
+      shouldBeOn = (currentSeconds >= onSeconds || currentSeconds < offSeconds);
+    }
+    
+    if (shouldBeOn) {
+      digitalWrite(RELAY_PIN, LOW);
+      digitalWrite(LED_1, HIGH);
+      digitalWrite(LED_2, LOW);
+      Serial.println("ON");
+      displayDeviceStatus("Bat may bom");
+    } else {
+      digitalWrite(RELAY_PIN, HIGH);
+      digitalWrite(LED_1, LOW);
+      digitalWrite(LED_2, HIGH);
+      Serial.println("OFF");
+      displayDeviceStatus("Tat may bom");
+    }
+  } else {
+    Serial.println("May bom: No schedule set");
+  }
 }
 
 void setup()
@@ -699,6 +864,19 @@ void loop()
           currentScreen = SET_TIME_INPUT;
           displaySetTimeInput();
         }
+        else if (key == '4') // Cài đặt thời gian hiện tại
+        {
+          currentScreen = SET_CURRENT_TIME;
+          currentTimeInput = "";
+          currentInputPhase = 0;
+          displaySetCurrentTime();
+        }
+        else if (key == '5') // Thoát
+        {
+          currentScreen = HOME;
+          displayHome();
+          Serial.println("Exited Set Time Menu");
+        }
         else if (key == '*')
         {
           currentScreen = HOME;
@@ -806,6 +984,89 @@ void loop()
           displaySetTimeMenu();
         }
       }
+      else if (currentScreen == SET_CURRENT_TIME)
+      {
+        if (key >= '0' && key <= '9')
+        {
+          if (currentInputPhase == 0 && currentTimeInput.length() < 2)
+          {
+            currentTimeInput += key;
+            displaySetCurrentTime();
+          }
+          else if (currentInputPhase == 1 && currentTimeInput.length() < 4)
+          {
+            currentTimeInput += key;
+            displaySetCurrentTime();
+          }
+        }
+        else if (key == 'A' && currentTimeInput.length() > 0)
+        {
+          currentTimeInput = currentTimeInput.substring(0, currentTimeInput.length() - 1);
+          displaySetCurrentTime();
+        }
+        else if (key == 'C')
+        {
+          currentTimeInput = "";
+          displaySetCurrentTime();
+        }
+        else if (key == '#')
+        {
+          if (currentInputPhase == 0 && currentTimeInput.length() == 2)
+          {
+            int hh = currentTimeInput.toInt();
+            if (hh >= 0 && hh <= 23)
+            {
+              currentInputPhase = 1;
+              displaySetCurrentTime();
+            }
+            else
+            {
+              lcd.setCursor(0, 3);
+              lcd.print("Gio khong hop le");
+              delay(2000);
+              lcd.setCursor(0, 3);
+              lcd.print("                    ");
+            }
+          }
+          else if (currentInputPhase == 1 && currentTimeInput.length() == 4)
+          {
+            int hh = currentTimeInput.substring(0, 2).toInt();
+            int mm = currentTimeInput.substring(2, 4).toInt();
+            if (mm >= 0 && mm <= 59)
+            {
+              currentTimeSeconds = hh * 3600 + mm * 60;
+              timeSetMillis = millis();
+              lcd.setCursor(0, 3);
+              lcd.print("Cai dat thanh cong");
+              delay(2000);
+              currentScreen = SET_TIME_MENU;
+              displaySetTimeMenu();
+            }
+            else
+            {
+              lcd.setCursor(0, 3);
+              lcd.print("Phut khong hop le");
+              delay(2000);
+              lcd.setCursor(0, 3);
+              lcd.print("                    ");
+            }
+          }
+          else
+          {
+            lcd.setCursor(0, 3);
+            lcd.print("Nhap day du gio/phut");
+            delay(2000);
+            lcd.setCursor(0, 3);
+            lcd.print("                    ");
+          }
+        }
+        else if (key == '*')
+        {
+          currentScreen = SET_TIME_MENU;
+          displaySetTimeMenu();
+        }
+        lastKeypadDebounceTime = millis();
+      }
       if (currentMode == MANUAL && !isSystemLocked)
       {
         if (key == 'A')
@@ -880,5 +1141,11 @@ void loop()
       Serial.println("Pump OFF, LED1 OFF, LED2 ON, Fan OFF");
     }
     lastDistanceMeasureTime = millis();
+  }
+
+  // Gọi controlDevicesByTime khi ở chế độ SETTING_TIME và màn hình HOME
+  if (currentMode == SETTING_TIME && !isSystemLocked && currentScreen == HOME)
+  {
+    controlDevicesByTime();
   }
 }
