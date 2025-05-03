@@ -57,7 +57,8 @@ enum ScreenState
   SELECT_MODE,
   SET_TIME_MENU,
   SET_TIME_INPUT,
-  SET_CURRENT_TIME
+  SET_CURRENT_TIME,
+  DEVICE_STATE 
 };
 
 // Biến toàn cục
@@ -413,11 +414,9 @@ void controlDevicesByTime()
     if (shouldBeOn) {
       digitalWrite(LED_PIN, HIGH);
       Serial.println("ON");
-      displayDeviceStatus("Bat den");
     } else {
       digitalWrite(LED_PIN, LOW);
       Serial.println("OFF");
-      displayDeviceStatus("Tat den");
     }
   } else {
     Serial.println("Den: No schedule set");
@@ -493,6 +492,86 @@ void controlDevicesByTime()
     }
   } else {
     Serial.println("May bom: No schedule set");
+  }
+}
+
+// Thêm hàm xác định trạng thái thiết bị
+String getDeviceStatus(DeviceTime deviceTime, long currentSeconds) {
+  if (deviceTime.onHour == -1 || deviceTime.offHour == -1) {
+    return "Not set";
+  }
+  long onSeconds = deviceTime.onHour * 3600 + deviceTime.onMinute * 60;
+  long offSeconds = deviceTime.offHour * 3600 + deviceTime.offMinute * 60;
+  bool shouldBeOn = false;
+  if (onSeconds <= offSeconds) {
+    shouldBeOn = (currentSeconds >= onSeconds && currentSeconds < offSeconds);
+    } else {
+      shouldBeOn = (currentSeconds >= onSeconds || currentSeconds < offSeconds);
+    }
+    return shouldBeOn ? "ON" : "OFF";
+}
+
+// Hàm hiển thị và cập nhật trạng thái thiết bị trực tiếp
+void displayDeviceState() {
+  lcd.clear();
+  lcd.setCursor(2, 0);
+  lcd.print("  Mode: Set time   ");
+
+  long currentSeconds = getCurrentTimeSeconds();
+  if (currentSeconds == -1) {
+    lcd.setCursor(0, 1);
+    lcd.print("Time not set");
+    return;
+  }
+
+  unsigned long lastUpdateTime = millis();
+  const unsigned long updateInterval = 1000; // Cập nhật mỗi giây
+
+  while (true) {
+    if (millis() - lastUpdateTime >= updateInterval) {
+      lastUpdateTime = millis();
+      currentSeconds = getCurrentTimeSeconds();
+
+      // Điều khiển thiết bị dựa trên thời gian hiện tại
+      controlDevicesByTime();
+
+      // Hiển thị trạng thái cố định cho từng thiết bị
+      lcd.setCursor(0, 1);
+      lcd.print("Den: ");
+      if (denTime.onHour != -1) {
+        String status = getDeviceStatus(denTime, currentSeconds);
+        lcd.print(status + "    "); // Thêm khoảng trắng để xóa ký tự cũ
+      } else {
+        lcd.print("Not set    ");
+      }
+
+      lcd.setCursor(0, 2);
+      lcd.print("Quat: ");
+      if (quatTime.onHour != -1) {
+        String status = getDeviceStatus(quatTime, currentSeconds);
+        lcd.print(status + "    ");
+      } else {
+        lcd.print("Not set    ");
+      }
+
+      lcd.setCursor(0, 3);
+      lcd.print("May bom nuoc:");
+      if (mayBomTime.onHour != -1) {
+        String status = getDeviceStatus(mayBomTime, currentSeconds);
+        lcd.print(status + "    ");
+      } else {
+        lcd.print("Not set    ");
+      }
+    }
+
+    // Kiểm tra phím '*'
+    char key = scanKeypad();
+    if (key == '*') {
+      currentScreen = HOME;
+      displayHome();
+      lastKeypadDebounceTime = millis();
+      break;
+    }
   }
 }
 
@@ -684,6 +763,19 @@ void loop()
     char key = scanKeypad();
     if (key != '\0')
     {
+      // Thêm logic xử lý phím A trong chế độ SETTING_TIME
+      if (currentMode == SETTING_TIME && key == 'A') {
+        currentScreen = DEVICE_STATE;
+        displayDeviceState();
+        lastKeypadDebounceTime = millis();
+      }
+      else if (currentScreen == DEVICE_STATE && key == '*') {
+        currentScreen = HOME;
+        displayHome();
+        lastKeypadDebounceTime = millis();
+      }
+      // Giữ nguyên các xử lý bàn phím khác từ mã gốc
+      else
       if (key == '*' && currentScreen == HOME)
       {
         currentScreen = MENU;
