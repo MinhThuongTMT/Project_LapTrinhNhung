@@ -1036,7 +1036,7 @@ void loop()
                     mayBomTime.offMinute = offMinute;
                   }
                   lcd.setCursor(0, 3);
-                  lcd.print("cai dat thanh cong");
+                  lcd.print("Cai dat thanh cong");
                   delay(2000);
                   currentScreen = SET_TIME_MENU;
                   displaySetTimeMenu();
@@ -1044,7 +1044,7 @@ void loop()
                 else
                 {
                   lcd.setCursor(0, 3);
-                  lcd.print("cai dat khong thanh ");
+                  lcd.print("Cai dat sai");
                   delay(2000);
                   inputPhase = 0;
                   timeInput = "";
@@ -1064,7 +1064,7 @@ void loop()
           else
           {
             lcd.setCursor(0, 3);
-            lcd.print("Nhap 4 so");
+            lcd.print("Nhap du ON va OFF");
             delay(2000);
             lcd.setCursor(0, 3);
             lcd.print("                    ");
